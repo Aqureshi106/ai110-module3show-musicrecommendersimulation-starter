@@ -275,17 +275,19 @@ def _score_song_dict(user_prefs: Dict, song: Dict, mode: str = "balanced") -> Tu
         preferred_mood_tags = [user_mood]
 
     if user_genre and song_genre == user_genre:
-        score += 1.0 * weights["genre"]
-        reasons.append(f"matches your favorite genre ({song.get('genre')})")
+        genre_points = 1.0 * weights["genre"]
+        score += genre_points
+        reasons.append(f"matches your favorite genre ({song.get('genre')}) (+{genre_points:.1f})")
 
     if user_mood and song_mood == user_mood:
-        score += 1.0 * weights["mood"]
-        reasons.append(f"matches your favorite mood ({song.get('mood')})")
+        mood_points = 1.0 * weights["mood"]
+        score += mood_points
+        reasons.append(f"matches your favorite mood ({song.get('mood')}) (+{mood_points:.1f})")
 
     energy_gap = abs(song_energy - target_energy)
     energy_score = max(0.0, 6.0 - (energy_gap * 12.0)) * weights["energy"]
     score += energy_score
-    reasons.append(f"energy is close to your target ({song_energy:.2f})")
+    reasons.append(f"energy is close to your target ({song_energy:.2f}) (+{energy_score:.1f})")
 
     tempo_gap = abs(song_tempo - target_tempo)
     tempo_score = max(0.0, 1.5 - (tempo_gap / 40.0)) * weights["tempo"]
@@ -303,31 +305,32 @@ def _score_song_dict(user_prefs: Dict, song: Dict, mode: str = "balanced") -> Tu
     popularity_score = max(0.0, 1.3 - (popularity_gap / 30.0)) * weights["popularity"]
     score += popularity_score
     if popularity_score > 0.0:
-        reasons.append(f"has popularity near your target ({song_popularity:.0f}/100)")
+        reasons.append(f"has popularity near your target ({song_popularity:.0f}/100) (+{popularity_score:.1f})")
 
     decade_score = _decade_alignment_score(song_release_decade, song_release_year, preferred_decade) * weights["decade"]
     score += decade_score
     if decade_score > 0.0:
         inferred_decade = song_release_decade or _decade_label((song_release_year // 10) * 10 if song_release_year else None)
-        reasons.append(f"fits your preferred era ({inferred_decade})")
+        reasons.append(f"fits your preferred era ({inferred_decade}) (+{decade_score:.1f})")
 
     matched_tags = [tag for tag in song_mood_tags if tag in preferred_mood_tags]
     tag_score = min(1.8, len(matched_tags) * 0.6) * weights["tags"]
     score += tag_score
     if matched_tags:
-        reasons.append(f"shares mood tags like {', '.join(matched_tags[:3])}")
+        reasons.append(f"shares mood tags like {', '.join(matched_tags[:3])} (+{tag_score:.1f})")
 
     target_era = _era_descriptor_target(preferred_decade, preferred_mood_tags)
     if song_era_descriptor and target_era and song_era_descriptor == target_era:
-        score += 0.9 * weights["era"]
-        reasons.append(f"matches the {target_era} era vibe")
+        era_points = 0.9 * weights["era"]
+        score += era_points
+        reasons.append(f"matches the {target_era} era vibe (+{era_points:.1f})")
 
     acoustic_bonus = _acoustic_bonus(song_acousticness, likes_acoustic) * weights["acoustic"]
     score += acoustic_bonus
     if likes_acoustic and song_acousticness >= 0.45:
-        reasons.append("leans acoustic, which you prefer")
+        reasons.append(f"leans acoustic, which you prefer (+{acoustic_bonus:.1f})")
     elif not likes_acoustic and song_acousticness <= 0.50:
-        reasons.append("stays on the less acoustic side")
+        reasons.append(f"stays on the less acoustic side (+{acoustic_bonus:.1f})")
 
     if not reasons:
         reasons.append("fits the overall vibe profile")

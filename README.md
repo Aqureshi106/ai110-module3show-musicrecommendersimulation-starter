@@ -116,6 +116,34 @@ The screenshots below show top-5 terminal recommendations for adversarial and ed
 
 ![Profile 7 - Impossible preference bundle](docs/edge-profile-screenshots/profile-7-impossible-bundle.png)
 
+### Sample Recommendation Output
+
+Terminal output for the default `pop` / `happy` profile (`energy=0.85`, `likes_acoustic=False`) using the `balanced` scoring mode, `k=5`:
+
+```
+#1 Sunrise City by Neon Echo
+    Score: 13.03
+    Reasons: matches your favorite genre (pop) (+1.0); matches your favorite mood (happy) (+1.0); energy is close to your target (0.82) (+5.6); has popularity near your target (94/100) (+0.2); stays on the less acoustic side (+2.0)
+
+#2 Gym Hero by Max Pulse
+    Score: 11.19
+    Reasons: matches your favorite genre (pop) (+1.0); energy is close to your target (0.93) (+5.0); has popularity near your target (89/100) (+0.3); stays on the less acoustic side (+2.0)
+
+#3 Rooftop Lights by Indigo Parade
+    Score: 10.66
+    Reasons: matches your favorite mood (happy) (+1.0); energy is close to your target (0.76) (+4.9); has popularity near your target (84/100) (+0.5); stays on the less acoustic side (+1.0)
+
+#4 Street Pulse by Kinetic Coast
+    Score: 10.50
+    Reasons: energy is close to your target (0.86) (+5.9); has popularity near your target (88/100) (+0.4); stays on the less acoustic side (+2.0)
+
+#5 Neon Heatwave by City Static
+    Score: 10.25
+    Reasons: energy is close to your target (0.79) (+5.3); has popularity near your target (87/100) (+0.4); stays on the less acoustic side (+2.0)
+```
+
+Sunrise City wins because it is the only song that stacks genre, mood, and energy proximity bonuses at once; Gym Hero and Rooftop Lights each only pick up two of the three.
+
 ### Running Tests
 
 Run the starter tests with:
