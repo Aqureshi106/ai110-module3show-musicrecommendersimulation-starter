@@ -44,6 +44,14 @@ I did not add or remove songs from the provided catalog. The data covers several
 
 ---
 
+## 5b. Diversity / Fairness Component
+
+The recommender fills its top-K list greedily: after sorting all songs by score, it picks one song at a time, and each time it subtracts an `ARTIST_REPEAT_PENALTY` of `1.5` points from any remaining song whose artist already has a pick in the result. This is a lightweight anti-filter-bubble measure — without it, an artist with several similarly-scoring songs (for example Neon Echo, which appears twice in the catalog) can occupy multiple slots in a 5-song list purely because their catalog entries are numerically close to the target profile, crowding out other reasonable matches.
+
+This improves fairness in a narrow but concrete sense: it caps how much of a small, fixed result list one artist can dominate purely by having more catalog entries, so listeners see more variety and artists with only one strong song still get a fair shot at a slot. It is not a full fairness solution — a large enough score gap still lets one artist sweep the list, and the penalty does nothing for genre- or mood-level imbalance in the catalog (see Limitations below).
+
+---
+
 ## 6. Limitations and Bias
 
 - Small catalog limitation: Results are constrained by only 18 songs, which can cause weak matches for niche preferences.
@@ -51,7 +59,7 @@ I did not add or remove songs from the provided catalog. The data covers several
 - Numeric-over-semantic bias: Songs with close numeric values can outrank songs that better match the user's stated genre or mood intent.
 - Weight sensitivity: Minor weight changes can produce large ranking changes, making output stability fragile.
 - Threshold artifacts: Acoustic preference uses hard cutoffs, so near-threshold songs can flip rank abruptly.
-- Diversity risk: The same "central" songs can appear repeatedly across profiles, reducing recommendation variety.
+- Diversity risk: The same "central" songs can appear repeatedly across profiles, reducing recommendation variety. The artist-repeat penalty (Section 5b) reduces one form of this — a single artist sweeping the list — but does not address a "central song" appearing across many different users' lists, or genre/mood-level imbalance in the catalog.
 
 If this were deployed in a real app, these effects could feel unfair to users whose taste is less represented in the catalog.
 

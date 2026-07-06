@@ -9,6 +9,8 @@ You will implement the functions in recommender.py:
 - recommend_songs
 """
 
+from tabulate import tabulate
+
 from .recommender import load_songs, recommend_songs
 
 
@@ -60,24 +62,19 @@ def main() -> None:
     for mode_key, mode_label in scoring_modes:
         recommendations = recommend_songs(taste_profile, songs, k=5, mode=mode_key)
 
-        print("\n" + "=" * 70)
-        print(f"🎵 {mode_label} MUSIC RECOMMENDATIONS 🎵".center(70))
-        print("=" * 70)
+        print("\n" + f"🎵 {mode_label} MUSIC RECOMMENDATIONS 🎵".center(70))
 
-        for i, rec in enumerate(recommendations, 1):
-            song, score, explanation = rec
-            reasons = [reason.strip() for reason in explanation.split(";")]
+        rows = []
+        for i, (song, score, explanation) in enumerate(recommendations, 1):
+            reasons = "\n".join(f"- {reason.strip()}" for reason in explanation.split(";"))
+            rows.append([i, song["title"], song["artist"], f"{song['genre']} / {song['mood']}", f"{score:.2f}", reasons])
 
-            print(f"\n#{i} {song['title']}")
-            print(f"    Artist: {song['artist']}")
-            print(f"    Genre: {song['genre']} • Mood: {song['mood']}")
-            print(f"    Match Score: {score:.2f}/10")
-            print(f"    Why you'll love it:")
-            for reason in reasons:
-                print(f"      • {reason.capitalize()}")
-            print("    " + "-" * 60)
-
-        print("\n" + "=" * 70 + "\n")
+        print(tabulate(
+            rows,
+            headers=["#", "Title", "Artist", "Genre / Mood", "Score", "Why It Was Recommended"],
+            tablefmt="grid",
+        ))
+        print()
 
 
 if __name__ == "__main__":

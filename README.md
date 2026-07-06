@@ -15,6 +15,18 @@ This version scores each song across 11 weighted features — genre, mood, energ
 
 ---
 
+## How Real-World Music Recommenders Work
+
+Services like Spotify and YouTube turn three separate kinds of information into a ranked list:
+
+- **Input data** — facts about the content itself, independent of any listener: a track's genre, tempo, key, acoustic features, release date, and (for YouTube) watch-time and click-through statistics aggregated across all users.
+- **User preferences** — signals tied to one listener: their play history, skips, likes, saved playlists, follows, and any explicit settings ("I like jazz"). This is the part that personalizes the system; input data alone would recommend the same thing to everyone.
+- **Ranking/selection** — the step where a model scores every candidate track against a user's preference signals and returns the top-N, often blending in business goals like promoting new releases or maximizing session length.
+
+The key distinction: input data describes the *catalog*, user preferences describe the *listener*, and ranking is the *function that combines the two into an ordered list*. Real systems typically use collaborative filtering (learning from what similar users liked) and content-based filtering (matching a track's own features to a user's stated or inferred taste) together, then re-rank for business or diversity goals. This project is a simplified, fully content-based version of that last idea: it has no collaborative signal (no other users, no play history) — it only compares each song's own features (genre, mood, energy, tempo, etc.) against one user's stated `UserProfile`, then sorts by the resulting score.
+
+---
+
 ## How The System Works
 
 Real recommendation systems combine many signals to predict what feels like a good next option. In this project, each `Song` carries genre, mood, energy, tempo, valence, danceability, acousticness, popularity, release decade, mood tags, and an era descriptor. The `UserProfile` stores a favorite genre, favorite mood, target energy level, acoustic preference, and optional numeric targets for tempo, valence, danceability, popularity, preferred decade, and mood tags.
@@ -39,11 +51,12 @@ The `Recommender` scores each song across all 11 features using a weighted formu
    - Add up to `2.0 × acoustic_weight` bonus based on whether the song's acousticness matches the user's acoustic preference.
 4. Store each song's total score and the list of reasons that contributed to it.
 5. Sort all songs by total score from highest to lowest, using title alphabetically as a tiebreaker.
-6. Return the top K songs as the final recommendations.
+6. Greedily fill the top K slots one at a time: for each remaining slot, pick the highest-scoring unpicked song, but subtract an `ARTIST_REPEAT_PENALTY` of `1.5` points from any song whose artist already has a pick in the results so far. This keeps a single artist from crowding out the whole list when their songs happen to score similarly.
+7. Return the top K songs as the final, diversified recommendations.
 
 ### Potential Biases
 
-This system might over-prioritize genre and energy, causing it to miss great songs that match the user's mood or overall vibe in a less direct way. Because the dataset is small and fixed, it can also reflect the limits of the catalog instead of the full range of real musical taste.
+This system might over-prioritize genre and energy, causing it to miss great songs that match the user's mood or overall vibe in a less direct way. Because the dataset is small and fixed, it can also reflect the limits of the catalog instead of the full range of real musical taste. The artist-repeat penalty (step 6) reduces one specific fairness risk — an artist dominating every slot — but it is a fixed-size handicap, not a true fairness guarantee: a strong enough score gap still lets the same artist sweep the list.
 
 ### Data Flow
 
@@ -55,7 +68,8 @@ flowchart TD
    C --> D["<b>Score song</b><br/>genre match<br/>mood match<br/>energy similarity<br/>tempo, valence, danceability<br/>popularity, decade, tags, era<br/>acoustic preference"]
    D --> E["Store score & reasons"]
    E --> F["Sort by score desc<br/>(title as tiebreaker)"]
-   F --> G["Return Top K"]
+   F --> G["Greedily pick Top K,<br/>docking repeat artists<br/>(artist diversity penalty)"]
+   G --> H["Return Top K"]
 
 ```
 
@@ -118,29 +132,51 @@ The screenshots below show top-5 terminal recommendations for adversarial and ed
 
 ### Sample Recommendation Output
 
-Terminal output for the default `pop` / `happy` profile (`energy=0.85`, `likes_acoustic=False`) using the `balanced` scoring mode, `k=5`:
+`python -m src.main` prints a `tabulate` grid table per scoring mode, with per-song reasons and their point contributions. Table for the default `pop` / `happy` profile (`energy=0.85`, `likes_acoustic=False`) using the `balanced` scoring mode, `k=5`:
 
 ```
-#1 Sunrise City by Neon Echo
-    Score: 13.03
-    Reasons: matches your favorite genre (pop) (+1.0); matches your favorite mood (happy) (+1.0); energy is close to your target (0.82) (+5.6); has popularity near your target (94/100) (+0.2); stays on the less acoustic side (+2.0)
-
-#2 Gym Hero by Max Pulse
-    Score: 11.19
-    Reasons: matches your favorite genre (pop) (+1.0); energy is close to your target (0.93) (+5.0); has popularity near your target (89/100) (+0.3); stays on the less acoustic side (+2.0)
-
-#3 Rooftop Lights by Indigo Parade
-    Score: 10.66
-    Reasons: matches your favorite mood (happy) (+1.0); energy is close to your target (0.76) (+4.9); has popularity near your target (84/100) (+0.5); stays on the less acoustic side (+1.0)
-
-#4 Street Pulse by Kinetic Coast
-    Score: 10.50
-    Reasons: energy is close to your target (0.86) (+5.9); has popularity near your target (88/100) (+0.4); stays on the less acoustic side (+2.0)
-
-#5 Neon Heatwave by City Static
-    Score: 10.25
-    Reasons: energy is close to your target (0.79) (+5.3); has popularity near your target (87/100) (+0.4); stays on the less acoustic side (+2.0)
++-----+----------------+---------------+---------------------+---------+---------------------------------------------------+
+|   # | Title          | Artist        | Genre / Mood        |   Score | Why It Was Recommended                            |
++=====+================+===============+=====================+=========+===================================================+
+|   1 | Sunrise City   | Neon Echo     | pop / happy         |   13.03 | - matches your favorite genre (pop) (+1.0)        |
+|     |                |               |                     |         | - matches your favorite mood (happy) (+1.0)       |
+|     |                |               |                     |         | - energy is close to your target (0.82) (+5.6)    |
+|     |                |               |                     |         | - has popularity near your target (94/100) (+0.2) |
+|     |                |               |                     |         | - stays on the less acoustic side (+2.0)          |
++-----+----------------+---------------+---------------------+---------+---------------------------------------------------+
+|   2 | Gym Hero       | Max Pulse     | pop / intense       |   11.19 | - matches your favorite genre (pop) (+1.0)        |
+|     |                |               |                     |         | - energy is close to your target (0.93) (+5.0)    |
+|     |                |               |                     |         | - has popularity near your target (89/100) (+0.3) |
+|     |                |               |                     |         | - stays on the less acoustic side (+2.0)          |
++-----+----------------+---------------+---------------------+---------+---------------------------------------------------+
+|   3 | Rooftop Lights | Indigo Parade | indie pop / happy   |   10.66 | - matches your favorite mood (happy) (+1.0)       |
+|     |                |               |                     |         | - energy is close to your target (0.76) (+4.9)    |
+|     |                |               |                     |         | - has popularity near your target (84/100) (+0.5) |
+|     |                |               |                     |         | - stays on the less acoustic side (+1.0)          |
++-----+----------------+---------------+---------------------+---------+---------------------------------------------------+
+|   4 | Street Pulse   | Kinetic Coast | hip hop / energetic |   10.5  | - energy is close to your target (0.86) (+5.9)    |
+|     |                |               |                     |         | - has popularity near your target (88/100) (+0.4) |
+|     |                |               |                     |         | - stays on the less acoustic side (+2.0)          |
++-----+----------------+---------------+---------------------+---------+---------------------------------------------------+
+|   5 | Neon Heatwave  | City Static   | electronic / dreamy |   10.25 | - energy is close to your target (0.79) (+5.3)    |
+|     |                |               |                     |         | - has popularity near your target (87/100) (+0.4) |
+|     |                |               |                     |         | - stays on the less acoustic side (+2.0)          |
++-----+----------------+---------------+---------------------+---------+---------------------------------------------------+
 ```
+
+No artist repeats here, so the diversity penalty had nothing to do. It does kick in for other profiles — e.g. `pop` / `happy` / `energy=0.8` with `preferred_mood_tags="euphoric"` puts two Neon Echo songs (Sunrise City, Night Drive Loop) in the raw top 6 by score alone:
+
+```
+RAW (no diversity):                          DIVERSIFIED (artist penalty applied):
+1. Sunrise City      (Neon Echo)   13.75     1. Sunrise City      (Neon Echo)   13.75
+2. Rooftop Lights    (Indigo P.)   11.86     2. Rooftop Lights    (Indigo P.)   11.86
+3. Neon Heatwave     (City Static) 11.45     3. Neon Heatwave     (City Static) 11.45
+4. Gym Hero          (Max Pulse)   11.19     4. Gym Hero          (Max Pulse)   11.19
+5. Night Drive Loop  (Neon Echo)   10.53     5. Street Pulse      (Kinetic C.)  9.90
+6. Street Pulse      (Kinetic C.)   9.90     6. Storm Runner      (Voltline)    9.31
+```
+
+Because Neon Echo already has a pick (Sunrise City), Night Drive Loop's effective score drops by the `1.5`-point `ARTIST_REPEAT_PENALTY`, pushing it below Storm Runner and out of the top 6 — one artist no longer occupies two of the six slots.
 
 Sunrise City wins because it is the only song that stacks genre, mood, and energy proximity bonuses at once; Gym Hero and Rooftop Lights each only pick up two of the three.
 

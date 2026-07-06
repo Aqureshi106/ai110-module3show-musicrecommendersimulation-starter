@@ -337,6 +337,31 @@ def _score_song_dict(user_prefs: Dict, song: Dict, mode: str = "balanced") -> Tu
 
     return score, reasons
 
+ARTIST_REPEAT_PENALTY = 1.5
+
+
+def _select_diverse_top_k(scored_items: List[Tuple[float, object]], k: int, get_artist, penalty: float = ARTIST_REPEAT_PENALTY) -> List[Tuple[float, object]]:
+    """Greedily pick k highest-scoring items while docking repeat artists to avoid a filter bubble."""
+    remaining = list(scored_items)
+    selected: List[Tuple[float, object]] = []
+    artist_counts: Dict[str, int] = {}
+
+    for _ in range(min(k, len(remaining))):
+        best_position = 0
+        best_effective_score = None
+        for position, (score, item) in enumerate(remaining):
+            effective_score = score - penalty * artist_counts.get(get_artist(item), 0)
+            if best_effective_score is None or effective_score > best_effective_score:
+                best_effective_score = effective_score
+                best_position = position
+
+        score, item = remaining.pop(best_position)
+        artist_counts[get_artist(item)] = artist_counts.get(get_artist(item), 0) + 1
+        selected.append((score, item))
+
+    return selected
+
+
 @dataclass
 class Song:
     """
@@ -403,14 +428,15 @@ class Recommender:
         self.songs = songs
 
     def recommend(self, user: UserProfile, k: int = 5, mode: str = "balanced") -> List[Song]:
-        """Return the top-k songs for a user profile."""
+        """Return the top-k songs for a user profile, diversified across artists."""
         scored_songs = []
         for song in self.songs:
             score, _ = self._score_song(user, song, mode=mode)
             scored_songs.append((score, song))
 
         scored_songs.sort(key=lambda item: (-item[0], item[1].title))
-        return [song for _, song in scored_songs[:k]]
+        diversified = _select_diverse_top_k(scored_songs, k, get_artist=lambda song: song.artist)
+        return [song for _, song in diversified]
 
     def explain_recommendation(self, user: UserProfile, song: Song, mode: str = "balanced") -> str:
         """Return a semicolon-separated explanation for one recommendation."""
@@ -489,7 +515,7 @@ def score_song(user_prefs: Dict, song: Dict, mode: str = "balanced") -> Tuple[fl
 
 def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5, mode: str = "balanced") -> List[Tuple[Dict, float, str]]:
     """
-    Functional implementation of the recommendation logic.
+    Functional implementation of the recommendation logic, diversified across artists.
     Required by src/main.py
     """
     scored_songs: List[Tuple[Dict, float, str]] = []
@@ -498,4 +524,6 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5, mode: str =
         scored_songs.append((song, score, "; ".join(reasons)))
 
     scored_songs.sort(key=lambda item: (-item[1], item[0].get("title", "")))
-    return scored_songs[:k]
+    scored_items = [(entry[1], entry) for entry in scored_songs]
+    diversified = _select_diverse_top_k(scored_items, k, get_artist=lambda entry: entry[0].get("artist", ""))
+    return [entry for _, entry in diversified]
